@@ -1,0 +1,128 @@
+# ─────────────────────────────────────────
+# GitLab Helm chart values
+# Chart: gitlab/gitlab v8.2.0 (GitLab 17.x)
+# ─────────────────────────────────────────
+
+global:
+  hosts:
+    domain: soroush
+    https: true
+    gitlab:
+      name: gitlab.soroush
+    registry:
+      name: registry.soroush
+    minio:
+      name: minio.soroush
+
+  ingress:
+    class: nginx
+    configureCertmanager: false
+    tls:
+      enabled: true
+      secretName: soroush-wildcard-tls
+
+  # Use the pre-created secrets
+  psql:
+    password:
+      secret: gitlab-postgresql-password
+      key: postgresql-password
+
+  redis:
+    auth:
+      secret: gitlab-redis-secret
+      key: secret
+
+  minio:
+    credentials:
+      secret: gitlab-minio-secret
+
+  # GitLab SSH port (avoiding conflict with host SSH on 22)
+  shell:
+    port: 2222
+
+  # Runner registration
+  runners:
+    secret: gitlab-runner-secret
+
+# Disable cert-manager (we use self-signed certs)
+certmanager:
+  install: false
+
+# nginx ingress — we deploy our own, disable bundled
+nginx-ingress:
+  enabled: false
+
+# PostgreSQL
+postgresql:
+  install: true
+  primary:
+    persistence:
+      size: 20Gi
+
+# Redis
+redis:
+  install: true
+  master:
+    persistence:
+      size: 5Gi
+
+# MinIO for object storage (artifacts, LFS, uploads)
+minio:
+  ingress:
+    enabled: true
+    tls:
+      enabled: true
+      secretName: soroush-wildcard-tls
+  persistence:
+    size: 20Gi
+
+# GitLab Rails (Webservice)
+gitlab:
+  webservice:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2
+        memory: 4Gi
+    ingress:
+      tls:
+        secretName: soroush-wildcard-tls
+
+  # Sidekiq for background jobs
+  sidekiq:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+
+  # Gitaly — Git storage backend
+  gitaly:
+    persistence:
+      size: 30Gi
+
+  # GitLab Shell
+  gitlab-shell:
+    replicaCount: 1
+    service:
+      type: NodePort
+      nodePort: 32222
+
+# GitLab Runner (registers automatically in-cluster)
+gitlab-runner:
+  install: true
+  rbac:
+    create: true
+  runners:
+    config: |
+      [[runners]]
+        [runners.kubernetes]
+          image = "ubuntu:22.04"
+          privileged = true
+          [[runners.kubernetes.volumes.empty_dir]]
+            name = "docker-certs"
+            mount_path = "/certs/client"
+            medium = "Memory"

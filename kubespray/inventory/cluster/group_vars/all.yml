@@ -1,0 +1,37 @@
+# ─────────────────────────────────────────
+# Kubespray cluster-wide settings
+# ─────────────────────────────────────────
+
+# Download settings
+download_run_once: true
+download_localhost: false
+
+# Cluster networking
+kube_network_plugin: calico
+kube_service_addresses: 10.96.0.0/12
+kube_pods_subnet: 192.168.0.0/16
+kube_network_node_prefix: 24
+
+# Container runtime
+container_manager: containerd
+
+# etcd settings
+etcd_deployment_type: host
+
+# Enable nodelocaldns for faster in-cluster DNS
+enable_nodelocaldns: true
+
+# NTP sync (important for token validity in air-gapped or cloud)
+ntp_enabled: true
+ntp_manage_config: true
+ntp_servers:
+  - "0.pool.ntp.org"
+  - "1.pool.ntp.org"
+
+# Disable swap (Kubernetes requirement)
+disable_swap: true
+
+# Upstream DNS servers for cluster nodes
+upstream_dns_servers:
+  - 8.8.8.8
+  - 1.1.1.1

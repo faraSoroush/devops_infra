@@ -1,0 +1,126 @@
+# ─────────────────────────────────────────
+# .gitlab-ci.yml — Full 5-stage pipeline
+# Works with the in-cluster GitLab Runner
+# ─────────────────────────────────────────
+
+stages:
+  - lint
+  - build
+  - test
+  - push
+  - deploy
+
+variables:
+  IMAGE_NAME: $CI_REGISTRY_IMAGE
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# ─────────────────────────────────────────
+# Stage 1: Lint
+# ─────────────────────────────────────────
+lint:dockerfile:
+  stage: lint
+  image: hadolint/hadolint:latest-alpine
+  script:
+    - hadolint Dockerfile
+  allow_failure: false
+
+lint:yaml:
+  stage: lint
+  image: cytopia/yamllint:latest
+  script:
+    - yamllint -c .yamllint.yml k8s/ || yamllint k8s/
+  allow_failure: true
+
+# ─────────────────────────────────────────
+# Stage 2: Build
+# ─────────────────────────────────────────
+build:image:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $IMAGE_NAME:$IMAGE_TAG .
+    - docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
+    - docker push $IMAGE_NAME:$IMAGE_TAG
+  only:
+    - branches
+    - tags
+
+# ─────────────────────────────────────────
+# Stage 3: Test
+# ─────────────────────────────────────────
+test:unit:
+  stage: test
+  image: $IMAGE_NAME:$IMAGE_TAG
+  script:
+    - echo "Running unit tests..."
+    - /app/run_tests.sh || true   # Replace with your actual test command
+  needs:
+    - build:image
+
+# ─────────────────────────────────────────
+# Stage 4: Push (tag with branch/tag name)
+# ─────────────────────────────────────────
+push:tag:
+  stage: push
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker pull $IMAGE_NAME:$IMAGE_TAG
+    - docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:$CI_COMMIT_REF_SLUG
+    - docker push $IMAGE_NAME:$CI_COMMIT_REF_SLUG
+  only:
+    - main
+    - develop
+    - tags
+  needs:
+    - test:unit
+
+# ─────────────────────────────────────────
+# Stage 5a: Deploy to Staging (auto)
+# ─────────────────────────────────────────
+deploy:staging:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  before_script:
+    - echo $KUBE_CONFIG | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+  script:
+    - kubectl set image deployment/app app=$IMAGE_NAME:$IMAGE_TAG -n staging
+    - kubectl rollout status deployment/app -n staging --timeout=3m
+  environment:
+    name: staging
+    url: https://app-staging.soroush
+  only:
+    - develop
+  needs:
+    - push:tag
+
+# ─────────────────────────────────────────
+# Stage 5b: Deploy to Production (manual)
+# ─────────────────────────────────────────
+deploy:production:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  before_script:
+    - echo $KUBE_CONFIG | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+  script:
+    - kubectl set image deployment/app app=$IMAGE_NAME:$IMAGE_TAG -n production
+    - kubectl rollout status deployment/app -n production --timeout=5m
+  environment:
+    name: production
+    url: https://app.soroush
+  when: manual
+  only:
+    - main
+    - tags
+  needs:
+    - push:tag

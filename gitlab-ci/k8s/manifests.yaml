@@ -1,0 +1,181 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+---
+# Deployment — staging
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: staging
+  labels:
+    app: demo-app
+    env: staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+        env: staging
+    spec:
+      containers:
+        - name: app
+          image: registry.soroush/demo/app:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+# Service — staging
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  namespace: staging
+spec:
+  selector:
+    app: demo-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+# Ingress — staging
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app
+  namespace: staging
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - app-staging.soroush
+      secretName: soroush-wildcard-tls
+  rules:
+    - host: app-staging.soroush
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app
+                port:
+                  number: 80
+---
+# Deployment — production (same image, higher replicas)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: production
+  labels:
+    app: demo-app
+    env: production
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+        env: production
+    spec:
+      containers:
+        - name: app
+          image: registry.soroush/demo/app:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+# Service — production
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  namespace: production
+spec:
+  selector:
+    app: demo-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+# Ingress — production
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app
+  namespace: production
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.soroush
+      secretName: soroush-wildcard-tls
+  rules:
+    - host: app.soroush
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app
+                port:
+                  number: 80

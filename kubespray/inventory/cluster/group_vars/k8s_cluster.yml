@@ -1,0 +1,45 @@
+# ─────────────────────────────────────────
+# Kubernetes cluster configuration
+# ─────────────────────────────────────────
+
+# Kubernetes version
+kube_version: v1.31.0
+
+# Cluster name
+cluster_name: soroush-k8s.local
+
+# RBAC enabled (required for GitLab, Prometheus)
+rbac_enabled: true
+
+# API server audit logging
+kubernetes_audit: false
+
+# kube-proxy mode: ipvs is more performant than iptables for larger clusters
+kube_proxy_mode: ipvs
+
+# Enable metrics-server (required for HPA)
+metrics_server_enabled: true
+
+# Ingress controller: we deploy ingress-nginx via Helm separately
+ingress_nginx_enabled: false
+
+# Storage
+local_path_provisioner_enabled: true
+local_path_provisioner_namespace: kube-system
+
+# Dashboard (disabled — we use Grafana instead)
+dashboard_enabled: false
+
+# Supplementary addresses added to the API server certificate SANs
+supplementary_addresses_in_ssl_keys:
+  - "127.0.0.1"
+
+# Allow pods on master node (single-master lab setup)
+# Comment out in real production multi-master setups
+node_taints: []
+
+# Calico-specific: eBPF dataplane off by default (not supported in all AWS kernels)
+calico_datastore: kdd
+calico_ipip_mode: Always
+calico_vxlan_mode: Never
+calico_network_backend: bird
